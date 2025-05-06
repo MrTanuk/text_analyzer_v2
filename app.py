@@ -34,7 +34,7 @@ talisman = Talisman(
 
     content_security_policy=None,
 
-    force_https=True
+    force_https=os.environ.get('ENV') == 'production'
 
 )
 
@@ -222,10 +222,7 @@ def upload_file():
 
 
 if __name__ == '__main__':
-    port = int(os.environ.get("PORT", 8080))
-    app.run(host='0.0.0.0', port=port)
-
-    if os.environ.get('ENV'):
+    if os.environ.get('ENV') == 'production':
 
         from waitress import serve
 
