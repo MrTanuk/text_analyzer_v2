@@ -49,6 +49,7 @@ app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
 # Configuraciones de la aplicación
 
 app.config['MAX_CONTENT_LENGTH'] = 10 * (1024**2)  # 10 MiB
+app.config['ALLOWED_EXTENSIONS'] = {'txt', 'csv', 'json'}
 
 ALLOWED_MIME_TYPES = {'text/plain', 'text/csv', 'application/json'}
 
@@ -82,7 +83,7 @@ def validar_file(archivo):
 
             extension in app.config['ALLOWED_EXTENSIONS'] and
 
-            mime_type in app.config['ALLOWED_MIME_TYPES']
+            mime_type in ['ALLOWED_MIME_TYPES']
 
         )
 
