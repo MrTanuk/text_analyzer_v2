@@ -54,6 +54,7 @@ def validar_file(archivo):
         return False
 
 def convert_size(size):
+    unit = str()
     if size == 0:
         return "0B"
 
@@ -64,46 +65,51 @@ def convert_size(size):
         size /= 1024
     return f"{size:.2f} {unit}"
 
+def detect_delimiter(csv_content):
+    # Analizar las primeras líneas para detectar el delimitador
+    sniffer = csv.Sniffer()
+    dialect = sniffer.sniff(csv_content.split("\n")[0])
+    return dialect.delimiter
+
 def show_csv_data(file, filename):
     try:
-        # Leer el contenido del archivo una sola vez
-        csv_content = file.read().decode('utf-8')
+        csv_content = file.read().decode("utf-8")
+        delimiter = detect_delimiter(csv_content)
         
-        # --- Parte 1: Procesamiento básico con csv.reader ---
-        csv_reader = csv.reader(StringIO(csv_content))
-        rows = list(csv_reader)
+        # Leer CSV y convertir NaN a None
+        df = pd.read_csv(
+            StringIO(csv_content),
+            delimiter=delimiter,
+        )
         
-        headers = rows[0] if rows else []
-        num_columns = len(headers)
-        num_rows = len(rows) - 1
-        preview_data = rows[:11]  # Primeras 10 filas + encabezado
-
-        # --- Parte 2: Análisis con Pandas ---
-        # Reiniciar el "cursor" del archivo en memoria
-        file_stream = StringIO(csv_content)
-        df = pd.read_csv(file_stream, infer_datetime_format=True, parse_dates=True)
+        # Convertir columnas numéricas a Int64 (admite nulos)
+        for col in df.columns:
+            if pd.api.types.is_numeric_dtype(df[col]):
+                df[col] = pd.to_numeric(df[col], errors="coerce").astype("Int64")
+        
+        # Preparar datos para la plantilla
+        preview_data = df.head(10).replace({pd.NA: None}).values.tolist()
         
         stats = {
-            'column_types': df.dtypes.astype(str).to_dict(),
-            'unique_counts': df.nunique().to_dict(),
-            'null_counts': df.isnull().sum().to_dict(),
-            'total_counts': (len(df) - df.isnull().sum()).to_dict()
+            "delimiter": delimiter,
+            "column_types": df.dtypes.astype(str).to_dict(),
+            "unique_counts": df.nunique().to_dict(),
+            "null_counts": df.isnull().sum().to_dict(),
+            "total_non_null": (len(df) - df.isnull().sum()).to_dict()
         }
-
-        # Un solo return con todos los datos
-        return render_template('result_csv.html',
-                              filename=filename,
-                              headers=headers,
-                              num_columns=num_columns,
-                              num_rows=num_rows,
-                              preview_data=preview_data,
-                              stats=stats,
-                              pandas_columns=df.columns.tolist())  # Opcional para más funcionalidades
-
+        
+        return render_template(
+            "result_csv.html",
+            filename=filename,
+            headers=df.columns.tolist(),
+            preview_data=preview_data,
+            stats=stats
+        )
+        
     except Exception as e:
-        app.logger.error(f'Error procesando CSV: {str(e)}')
-        flash('Error al analizar el archivo CSV')
-        return redirect(url_for('upload_file'))
+        app.logger.error(f"Error procesando CSV: {str(e)}")
+        flash("Error al analizar el archivo CSV")
+        return redirect(url_for("upload_file"))
 
 @app.route('/', methods=['GET', 'POST'])
 

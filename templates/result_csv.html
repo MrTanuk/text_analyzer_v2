@@ -2,7 +2,39 @@
 
 {% block content %}
 <div class="container">
-    <!-- Sección de estadísticas -->
+    <!-- Mostrar el delimitador detectado -->
+    <div class="alert alert-info mb-4">
+    <h5>Guardar archivo CSV <button id="saveBtn" class="btn btn-success btn-sm">💾 Guardar</button></h5>
+    </div>
+
+    <!-- Tabla de vista previa -->
+    <div class="card mb-4">
+        <div class="card-header">
+            <h5>Vista previa del CSV</h5>
+        </div>
+        <div class="card-body table-responsive">
+            <table class="table table-bordered">
+                <thead class="table-dark">
+                    <tr>
+                        {% for header in headers %}
+                        <th contenteditable="true">{{ header }}</th>
+                        {% endfor %}
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for row in preview_data %}
+                    <tr>
+                        {% for cell in row %}
+                        <td contenteditable="true">{{ cell if cell is not none }}</td>
+                        {% endfor %}
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Sección de estadísticas (igual que antes) -->
     <div class="card mb-4">
         <div class="card-header">
             <h5>📈 Análisis Avanzado</h5>
@@ -14,57 +46,37 @@
                 <ul class="list-unstyled">
                     <li>Valores únicos: {{ stats.unique_counts[col_name] }}</li>
                     <li>Valores nulos: {{ stats.null_counts[col_name] }}</li>
-                    <li>Valor total: {{ stats.total_counts[col_name] }}</li>
+                    <li>Valores no nulos: {{ stats.total_non_null[col_name] }}</li>
                 </ul>
             </div>
             {% endfor %}
         </div>
     </div>
-
-    <!-- Editor de CSV -->
-    <div class="card">
-        <div class="card-header">
-            <h5>Editor de CSV <button id="saveBtn" class="btn btn-success btn-sm">💾 Guardar</button></h5>
-        </div>
-        <div class="card-body table-responsive">
-            <table class="table table-bordered editable-table">
-                <thead class="table-dark">
-                    <tr>
-                        {% for header in headers %}
-                        <th contenteditable="true">{{ header }}</th>
-                        {% endfor %}
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for row in preview_data[1:] %}
-                    <tr>
-                        {% for cell in row %}
-                        <td contenteditable="true">{{ cell }}</td>
-                        {% endfor %}
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
-        </div>
-    </div>
 </div>
 
 <script>
-document.getElementById('saveBtn').addEventListener('click', function() {
-    const tableData = [];
+    document.getElementById('saveBtn').addEventListener('click', () => {
+    const data = [];
+    const delimiter = "{{ stats.delimiter }}";  // Usar el delimitador detectado
+    
     document.querySelectorAll('tbody tr').forEach(row => {
         const rowData = {};
-        document.querySelectorAll('th').forEach((th, idx) => {
-            rowData[th.textContent] = row.children[idx].textContent;
+        row.querySelectorAll('td').forEach((td, index) => {
+            const header = document.querySelectorAll('th')[index].textContent;
+            rowData[header] = td.textContent.trim() || null;
         });
-        tableData.push(rowData);
+        data.push(rowData);
     });
 
     fetch('/save_csv', {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({data: tableData, filename: '{{ filename }}'})
-    }).then(response => alert('Cambios guardados ✅'));
+        body: JSON.stringify({
+            filename: '{{ filename }}',
+            data: data,
+            delimiter: delimiter  // Enviar el delimitador original
+        })
+    }).then(response => alert('¡Cambios guardados! ✅'));
 });
 </script>
 {% endblock %}
