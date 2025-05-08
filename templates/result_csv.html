@@ -1,63 +1,115 @@
 {% extends "base.html" %}
 
 {% block content %}
-<div class="container">
-    <!-- Mostrar el delimitador detectado -->
-    <div class="alert alert-info mb-4">
-    <h5>Guardar archivo CSV <button id="saveBtn" class="btn btn-success btn-sm">💾 Guardar</button></h5>
-    </div>
-
-    <!-- Tabla de vista previa -->
-    <div class="card mb-4">
-        <div class="card-header">
-            <h5>Vista previa del CSV</h5>
-        </div>
-        <div class="card-body table-responsive">
-            <table class="table table-bordered">
-                <thead class="table-dark">
-                    <tr>
-                        {% for header in headers %}
-                        <th contenteditable="true">{{ header }}</th>
-                        {% endfor %}
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for row in preview_data %}
-                    <tr>
-                        {% for cell in row %}
-                        <td contenteditable="true">{{ cell if cell is not none }}</td>
-                        {% endfor %}
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
-        </div>
-    </div>
-
-    <!-- Sección de estadísticas (igual que antes) -->
-    <div class="card mb-4">
-        <div class="card-header">
-            <h5>📈 Análisis Avanzado</h5>
-        </div>
-        <div class="card-body">
-            {% for col_name, col_type in stats.column_types.items() %}
-            <div class="mb-3">
-                <h6>{{ col_name }} ({{ col_type }})</h6>
-                <ul class="list-unstyled">
-                    <li>Valores únicos: {{ stats.unique_counts[col_name] }}</li>
-                    <li>Valores nulos: {{ stats.null_counts[col_name] }}</li>
-                    <li>Valores no nulos: {{ stats.total_non_null[col_name] }}</li>
-                </ul>
+<div class="container mt-4">
+    <div class="card shadow-sm">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <h5 class="mb-0">Resultados del análisis: {{ filename }}</h5>
+            <div>
+                <button id="saveBtn" class="btn btn-success btn-sm">💾 Guardar</button>
+                <a href="{{ url_for('download_file', filename=filename) }}" class="btn btn-secondary btn-sm">
+                    ⬇️ Descargar
+                </a>
             </div>
-            {% endfor %}
+        </div>
+
+        <div class="card-body">
+            <!-- Estadísticas -->
+            <div class="row mb-4">
+                <div class="col-md-4">
+                    <div class="card text-white bg-info mb-3">
+                        <div class="card-body text-center">
+                            <h2 class="card-title">{{ stats.total_non_null|length }}</h2>
+                            <p class="card-text">Filas totales</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="card text-white bg-primary mb-3">
+                        <div class="card-body text-center">
+                            <h2 class="card-title">{{ headers|length }}</h2>
+                            <p class="card-text">Columnas</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="card text-white bg-warning mb-3">
+                        <div class="card-body text-center">
+                            <h2 class="card-title">{{ preview_data|length }}</h2>
+                            <p class="card-text">Filas mostradas</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Editor de tabla -->
+            <div class="mb-4">
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="mb-0">Editor de CSV (Delimitador: {{ stats.delimiter }})</h5>
+                    </div>
+                    <div class="card-body table-responsive p-0">
+                        <table class="table table-bordered editable-table">
+                            <thead class="table-dark">
+                                <tr>
+                                    {% for header in headers %}
+                                    <th contenteditable="true">{{ header }}</th>
+                                    {% endfor %}
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for row in preview_data %}
+                                <tr>
+                                    {% for cell in row %}
+                                    <td contenteditable="true">{{ cell if cell is not none }}</td>
+                                    {% endfor %}
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Análisis avanzado -->
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h5>📈 Estadísticas por columna</h5>
+                </div>
+                <div class="card-body">
+                    {% for col_name, col_type in stats.column_types.items() %}
+                    <div class="mb-3">
+                        <h6>{{ col_name }} <small class="text-muted">({{ col_type }})</small></h6>
+                        <div class="progress mb-2" style="height: 25px;">
+                            <div class="progress-bar bg-success" 
+                                role="progressbar" 
+                                style="width: {{ (stats.total_non_null[col_name]/stats.total_non_null|length)*100 }}%">
+                                {{ stats.total_non_null[col_name] }} válidos
+                            </div>
+                        </div>
+                        <ul class="list-unstyled">
+                            <li>Valores únicos: {{ stats.unique_counts[col_name] }}</li>
+                            <li>Valores nulos: {{ stats.null_counts[col_name] }}</li>
+                        </ul>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+
+            <!-- Botones de acción -->
+            <div class="d-flex justify-content-between">
+                <a href="/" class="btn btn-outline-secondary">
+                    ← Volver
+                </a>
+            </div>
         </div>
     </div>
 </div>
 
 <script>
-    document.getElementById('saveBtn').addEventListener('click', () => {
+document.getElementById('saveBtn').addEventListener('click', () => {
     const data = [];
-    const delimiter = "{{ stats.delimiter }}";  // Usar el delimitador detectado
+    const delimiter = "{{ stats.delimiter }}";
     
     document.querySelectorAll('tbody tr').forEach(row => {
         const rowData = {};
@@ -74,9 +126,31 @@
         body: JSON.stringify({
             filename: '{{ filename }}',
             data: data,
-            delimiter: delimiter  // Enviar el delimitador original
+            delimiter: delimiter
         })
-    }).then(response => alert('¡Cambios guardados! ✅'));
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            alert('✅ CSV guardado correctamente');
+        } else {
+            alert(`❌ Error: ${data.error || 'Falló el guardado'}`);
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('❌ Error de conexión');
+    });
 });
 </script>
+
+<style>
+.editable-table td, .editable-table th {
+    min-width: 120px;
+}
+.progress-bar {
+    font-size: 0.9rem;
+    padding: 0.3rem;
+}
+</style>
 {% endblock %}

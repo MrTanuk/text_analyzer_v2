@@ -2,8 +2,7 @@ import os
 from io import StringIO
 import csv
 import pandas as pd
-from datetime import date
-from flask import Flask, render_template, request, redirect, url_for, flash
+from flask import Flask, render_template, request, redirect, url_for, flash, send_from_directory, jsonify
 from werkzeug.utils import secure_filename
 from werkzeug.middleware.proxy_fix import ProxyFix
 from flask_talisman import Talisman
@@ -28,8 +27,12 @@ app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
 
 # Configuraciones de la aplicación
 app.config['MAX_CONTENT_LENGTH'] = 10 * (1024**2)  # 10 MiB
-app.config['ALLOWED_EXTENSIONS'] = {'txt', 'csv', 'json'}
-ALLOWED_MIME_TYPES = {'text/plain', 'text/csv', 'application/json'}
+app.config['ALLOWED_EXTENSIONS'] = {'txt', 'csv'}
+ALLOWED_MIME_TYPES = {'text/plain', 'text/csv'}
+UPLOAD_FOLDER = 'uploads'
+if not os.path.exists(UPLOAD_FOLDER):
+    os.makedirs(UPLOAD_FOLDER)
+app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 
 def validar_file(archivo):
     try:
@@ -46,9 +49,9 @@ def validar_file(archivo):
 
         extension = filename.rsplit('.', 1)[1].lower()
         return (
-            extension in app.config['ALLOWED_EXTENSIONS'] and
-            mime_type in ['ALLOWED_MIME_TYPES']
-        )
+                extension in app.config['ALLOWED_EXTENSIONS'] and
+                mime_type in ALLOWED_MIME_TYPES
+            )
     except Exception as e:
         app.logger.error(f'Error validación: {str(e)}')
         return False
@@ -64,6 +67,26 @@ def convert_size(size):
             break
         size /= 1024
     return f"{size:.2f} {unit}"
+
+def show_txt_data(file, filename):
+    try:
+        content = file.read().decode('utf-8')
+        
+        # Guardar el archivo en la carpeta uploads
+        filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+        with open(filepath, 'w', encoding='utf-8') as f:
+            f.write(content)
+            
+        return render_template('result_txt.html',
+                            filename=filename,
+                            content=content,
+                            size=convert_size(len(content)),
+                            lines=len(content.splitlines()),
+                            words=len(content.split()),
+                            characters=len(content))
+    except Exception as e:
+        flash('Error procesando archivo de texto')
+        return redirect(url_for('upload_file'))
 
 def detect_delimiter(csv_content):
     # Analizar las primeras líneas para detectar el delimitador
@@ -134,29 +157,12 @@ def upload_file():
                 flash('Tipo de archivo no permitido')
                 return redirect(request.url)
 
-            # Calcular tamaño
-            file.seek(0, os.SEEK_END)
-            size_bytes = file.tell()
-            file.seek(0)
-
             try:
                 if file_type == 'text/csv':
                     return show_csv_data(file, filename)
-                else:
-                    datefile = date.today()
-                    content = file.read().decode('UTF-8')
-                    lines = len(content.splitlines())
-                    words = len(content.split())
-                    characters = len(content)
+                else:  # TXT
+                    return show_txt_data(file, filename)
 
-                    return render_template('result.html',
-                                        filename=filename,
-                                        file_type=file_type,
-                                        date=datefile,
-                                        size=convert_size(size_bytes),
-                                        lines=lines,
-                                        words=words,
-                                        characters=characters)
             except UnicodeDecodeError:
                 flash('El archivo no es texto válido')
                 return redirect(request.url)
@@ -166,6 +172,59 @@ def upload_file():
                 return redirect(request.url)
 
     return render_template('upload.html')
+
+@app.route('/download/<filename>')
+def download_file(filename):
+    return send_from_directory(
+        app.config['UPLOAD_FOLDER'],
+        filename,
+        as_attachment=True
+    )
+
+@app.route('/save_txt', methods=['POST'])
+def save_txt():
+    try:
+        # Verificar si se recibieron datos JSON
+        if not request.is_json:
+            return jsonify({"success": False, "error": "Solicitud debe ser JSON"}), 400
+        
+        data = request.get_json()
+        filename = secure_filename(data.get('filename'))
+        content = data.get('content')
+        
+        if not filename or content is None:
+            return jsonify({"success": False, "error": "Datos incompletos"}), 400
+        
+        # Guardar el archivo
+        filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+        with open(filepath, 'w', encoding='utf-8') as f:
+            f.write(content)
+        
+        return jsonify({"success": True})
+    
+    except Exception as e:
+        app.logger.error(f"Error al guardar TXT: {str(e)}")
+        return jsonify({"success": False, "error": str(e)}), 500
+
+@app.route('/save_csv', methods=['POST'])
+def save_csv():
+    try:
+        data = request.json
+        filename = secure_filename(data['filename'])
+        delimiter = data['delimiter']
+        
+        # Crear DataFrame desde los datos editados
+        df = pd.DataFrame(data['data'])
+        
+        # Guardar con el delimitador original
+        filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+        df.to_csv(filepath, sep=delimiter, index=False)
+        
+        return jsonify(success=True)
+    
+    except Exception as e:
+        app.logger.error(f"Error guardando CSV: {str(e)}")
+        return jsonify(success=False, error=str(e)), 500
 
 if __name__ == '__main__':
     if os.environ.get('ENV') == 'production':
