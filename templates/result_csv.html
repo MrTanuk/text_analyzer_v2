@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container">
+    <!-- Sección de estadísticas -->
+    <div class="card mb-4">
+        <div class="card-header">
+            <h5>📈 Análisis Avanzado</h5>
+        </div>
+        <div class="card-body">
+            {% for col_name, col_type in stats.column_types.items() %}
+            <div class="mb-3">
+                <h6>{{ col_name }} ({{ col_type }})</h6>
+                <ul class="list-unstyled">
+                    <li>Valores únicos: {{ stats.unique_counts[col_name] }}</li>
+                    <li>Valores nulos: {{ stats.null_counts[col_name] }}</li>
+                    <li>Valor total: {{ stats.total_counts[col_name] }}</li>
+                </ul>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+
+    <!-- Editor de CSV -->
+    <div class="card">
+        <div class="card-header">
+            <h5>Editor de CSV <button id="saveBtn" class="btn btn-success btn-sm">💾 Guardar</button></h5>
+        </div>
+        <div class="card-body table-responsive">
+            <table class="table table-bordered editable-table">
+                <thead class="table-dark">
+                    <tr>
+                        {% for header in headers %}
+                        <th contenteditable="true">{{ header }}</th>
+                        {% endfor %}
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for row in preview_data[1:] %}
+                    <tr>
+                        {% for cell in row %}
+                        <td contenteditable="true">{{ cell }}</td>
+                        {% endfor %}
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<script>
+document.getElementById('saveBtn').addEventListener('click', function() {
+    const tableData = [];
+    document.querySelectorAll('tbody tr').forEach(row => {
+        const rowData = {};
+        document.querySelectorAll('th').forEach((th, idx) => {
+            rowData[th.textContent] = row.children[idx].textContent;
+        });
+        tableData.push(rowData);
+    });
+
+    fetch('/save_csv', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({data: tableData, filename: '{{ filename }}'})
+    }).then(response => alert('Cambios guardados ✅'));
+});
+</script>
+{% endblock %}

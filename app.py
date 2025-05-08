@@ -1,4 +1,7 @@
 import os
+from io import StringIO
+import csv
+import pandas as pd
 from datetime import date
 from flask import Flask, render_template, request, redirect, url_for, flash
 from werkzeug.utils import secure_filename
@@ -61,6 +64,47 @@ def convert_size(size):
         size /= 1024
     return f"{size:.2f} {unit}"
 
+def show_csv_data(file, filename):
+    try:
+        # Leer el contenido del archivo una sola vez
+        csv_content = file.read().decode('utf-8')
+        
+        # --- Parte 1: Procesamiento básico con csv.reader ---
+        csv_reader = csv.reader(StringIO(csv_content))
+        rows = list(csv_reader)
+        
+        headers = rows[0] if rows else []
+        num_columns = len(headers)
+        num_rows = len(rows) - 1
+        preview_data = rows[:11]  # Primeras 10 filas + encabezado
+
+        # --- Parte 2: Análisis con Pandas ---
+        # Reiniciar el "cursor" del archivo en memoria
+        file_stream = StringIO(csv_content)
+        df = pd.read_csv(file_stream, infer_datetime_format=True, parse_dates=True)
+        
+        stats = {
+            'column_types': df.dtypes.astype(str).to_dict(),
+            'unique_counts': df.nunique().to_dict(),
+            'null_counts': df.isnull().sum().to_dict(),
+            'total_counts': (len(df) - df.isnull().sum()).to_dict()
+        }
+
+        # Un solo return con todos los datos
+        return render_template('result_csv.html',
+                              filename=filename,
+                              headers=headers,
+                              num_columns=num_columns,
+                              num_rows=num_rows,
+                              preview_data=preview_data,
+                              stats=stats,
+                              pandas_columns=df.columns.tolist())  # Opcional para más funcionalidades
+
+    except Exception as e:
+        app.logger.error(f'Error procesando CSV: {str(e)}')
+        flash('Error al analizar el archivo CSV')
+        return redirect(url_for('upload_file'))
+
 @app.route('/', methods=['GET', 'POST'])
 
 def upload_file():
@@ -76,7 +120,7 @@ def upload_file():
             return redirect(request.url)
 
         if file:
-            filename = secure_filename(file.filename)
+            filename = secure_filename(str(file.filename))
             file_type = file.mimetype
 
             # Validación MIME type estricta
@@ -90,20 +134,23 @@ def upload_file():
             file.seek(0)
 
             try:
-                datefile = date.today()
-                content = file.read().decode('UTF-8')
-                lines = len(content.splitlines())
-                words = len(content.split())
-                characters = len(content)
+                if file_type == 'text/csv':
+                    return show_csv_data(file, filename)
+                else:
+                    datefile = date.today()
+                    content = file.read().decode('UTF-8')
+                    lines = len(content.splitlines())
+                    words = len(content.split())
+                    characters = len(content)
 
-                return render_template('result.html',
-                                    filename=filename,
-                                    file_type=file_type,
-                                    date=datefile,
-                                    size=convert_size(size_bytes),
-                                    lines=lines,
-                                    words=words,
-                                    characters=characters)
+                    return render_template('result.html',
+                                        filename=filename,
+                                        file_type=file_type,
+                                        date=datefile,
+                                        size=convert_size(size_bytes),
+                                        lines=lines,
+                                        words=words,
+                                        characters=characters)
             except UnicodeDecodeError:
                 flash('El archivo no es texto válido')
                 return redirect(request.url)
